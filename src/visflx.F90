@@ -33,6 +33,8 @@ subroutine visflx
 !st = mpi_wtime()
 
  !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  do j=1,ny
   do i=1,nx
    do k=1,nz
@@ -169,6 +171,7 @@ subroutine visflx
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 
 !et = mpi_wtime()
@@ -201,6 +204,8 @@ subroutine visflx_div
 !st = mpi_wtime()
 !
  !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
  do k=1,nz
   do j=1,ny
    do i=1,nx
@@ -246,7 +251,7 @@ subroutine visflx_div
    enddo
   enddo
  enddo
-
+ !$omp end target
  !!!!@cuf iercuda=cudaDeviceSynchronize()
 !et = mpi_wtime()
 !ttt = et-st

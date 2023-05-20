@@ -3,7 +3,8 @@
 # SUPPORTED MODES  : opt, debug [default=debug]
 # SUPPORTED PRECISIONS (PREC) : single, double [default=double]
 #----------------------------------------------------------------------
-COMPILE = "gnu"
+#COMPILE = "gnu"
+COMPILE = "flang"
 MODE    = "opt"
 PREC    = "double"
 #----------------------------------------------------------------------
@@ -12,6 +13,22 @@ ifeq (${PREC},"single") # mpif90 shipped with PGI compiler
 endif
 
 #----------------------------------------------------------------------
+
+ifeq (${COMPILE},"flang") # mpif90 from MPI library
+    FC = flang
+    CC = hipcc
+    MPI_PATH = /path/to/your/openMPI/installation
+    HIPFORT_PATH = /path/to/your/hipfort_flang/installation
+    INCLUDE   = -I $(MPI_PATH)/include -I $(MPI_PATH)/lib -I${HIPFORT_PATH}/include/amdgcn
+    FCLIBS    = -L$(MPI_PATH)/lib -lmpi_mpifh -L${ROCM_PATH}/lib -lamdhip64 -Wl,-rpath=$(ROCM_PATH)/lib -lstdc++ -L${HIPFORT_PATH}/lib -lhipfort-amdgcn
+    HIPFILES = euler_kernel.cpp
+    ifeq (${MODE},"opt")
+        OLEVEL = -O3 -fopenmp -fopenmp-targets=amdgcn-amd-amdhsa -Xopenmp-target=amdgcn-amd-amdhsa -march=gfx906 -DUSE_OMP_HIP
+    else
+        OLEVEL = -O2 -fopenmp -fopenmp-targets=amdgcn-amd-amdhsa -Xopenmp-target=amdgcn-amd-amdhsa -march=gfx906 -DUSE_OMP_HIP
+        #OLEVEL = -O2 -fbounds-check -g -fbacktrace -fdump-core
+    endif
+endif
 
 ifeq (${COMPILE},"cray-cuda") # mpif90 shipped with PGI compiler
     # Pitz-Daint instructions (2020)
@@ -115,7 +132,8 @@ LDFLAGS =
 #----------------------------------------------------------------------
 
 $(EXEC): $(OBJS) Makefile
-	$(FC) $(PRECFLAGS) $(OLEVEL) -o $@ $(OBJS) $(FCLIBS) $(LDFLAGS)
+	$(CC) ${CFLAGS} -c ${HIPFILES}
+	$(FC) $(PRECFLAGS) $(OLEVEL) -o $@ euler_kernel.o $(OBJS) $(FCLIBS) $(LDFLAGS)
 
 %.o:%.F90 Makefile
 	$(FC) $(PRECFLAGS) $(INCLUDE) $(OLEVEL) -c $< -o $@

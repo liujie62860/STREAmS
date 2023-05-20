@@ -11,20 +11,29 @@ subroutine step
  real(mykind), dimension(ny) :: evmax_mat_y_cpu
  
  evmax = 0._mykind
+ !$omp target enter data map(to:evmax_mat_y, evmax_mat_yz)
  !$cuf kernel do(1) <<<*,*>>> 
+ !$omp target 
+ !$omp teams distribute parallel do collapse(1) 
  do j=1,ny
   evmax_mat_y(j) = 0._mykind
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  !$cuf kernel do(2) <<<*,*>>> 
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2) 
  do j=1,ny
   do k=1,nz
    evmax_mat_yz(j,k) = 0._mykind
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 
- !$cuf kernel do(2) <<<*,*>>> 
+ !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2) 
  do k=1,nz
   do j=1,ny
    do i=1,nx
@@ -67,16 +76,20 @@ subroutine step
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
-
+ !$omp target 
+ !$omp teams distribute parallel do collapse(1)
  !$cuf kernel do(1) <<<*,*>>> 
  do j=1,ny
   do k=1,nz
    evmax_mat_y(j) = max(evmax_mat_yz(j,k), evmax_mat_y(j))
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
+!$omp target exit data map(from:evmax_mat_y, evmax_mat_yz)
  evmax_mat_y_cpu = evmax_mat_y
 !
  evmax = maxval(evmax_mat_y_cpu)

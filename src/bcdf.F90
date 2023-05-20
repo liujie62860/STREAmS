@@ -16,6 +16,9 @@ subroutine bcdf(ilat)
  real(mykind) :: exp1_2,sqrtexp_2
  real(mykind) :: exp1_3,sqrtexp_3
 !
+!$omp target enter data map(to:vf_df_old, vf_df_gpu, uf, rfy_gpu, by_df_gpu, rf_gpu, bz_df_gpu, amat_df_gpu)
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  !$cuf kernel do(2) <<<*,*>>>
  do k=1,nz
   do j=1,ny
@@ -26,8 +29,11 @@ subroutine bcdf(ilat)
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  !$cuf kernel do(2) <<<*,*>>>
  do k=1-nfmax,nz+nfmax
   do j=1,ny
@@ -36,10 +42,13 @@ subroutine bcdf(ilat)
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
 ! Convolution in y (from rf_gpu to rfy_gpu)
 !
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  !$cuf kernel do(2) <<<*,*>>>
  do k=1-nfmax,nz+nfmax
   do j=1,ny
@@ -50,10 +59,13 @@ subroutine bcdf(ilat)
    enddo
   enddo
  enddo      
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
 ! Convolution in z (from rfy_gpu to vf_df_gpu)
 !
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  !$cuf kernel do(2) <<<*,*>>>
  do k=1,nz
   do j=1,ny
@@ -64,6 +76,7 @@ subroutine bcdf(ilat)
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
 !Provide correlation in time
@@ -80,6 +93,8 @@ subroutine bcdf(ilat)
  exparg    = -pi*alpdtold/tlen
  sqrtexp_3 = sqrt(1._mykind-exp(exparg))
  exp1_3    = exp(0.5_mykind*exparg) 
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  !$cuf kernel do(2) <<<*,*>>>
  do k=1,nz
   do j=1,ny
@@ -91,6 +106,7 @@ subroutine bcdf(ilat)
    vf_df_old(3,j,k) = vf_df_gpu(3,j,k)
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
 ! Remove spanwise mean and normalize
@@ -115,6 +131,8 @@ subroutine bcdf(ilat)
 ! enddo
 !enddo
 !
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  !$cuf kernel do(2) <<<*,*>>>
  do k=1,nz
   do j=2,ny
@@ -125,10 +143,13 @@ subroutine bcdf(ilat)
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
  if (ilat==1) then     ! left side
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do j=1,ny
     do i=1,ngdf-1
@@ -169,6 +190,7 @@ subroutine bcdf(ilat)
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  elseif (ilat==2) then  ! right
  elseif (ilat==3) then  ! bottom side
@@ -177,4 +199,5 @@ subroutine bcdf(ilat)
  elseif (ilat==6) then  ! fore side
  endif
 ! 
+!$omp target exit data map(from:vf_df_old, vf_df_gpu, uf, rfy_gpu, by_df_gpu, rf_gpu, bz_df_gpu, amat_df_gpu)
 end subroutine bcdf

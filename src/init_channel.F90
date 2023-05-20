@@ -32,9 +32,12 @@ subroutine init_channel
     wfluc   = u0_02*rr(3)
     vfluc   = vfluc+u0_05*sin(0.5_mykind*pi*y(j))*cos(2*pi*z(k))
     wfluc   = wfluc+u0_05*sin(0.5_mykind*pi*y(j))*sin(2*pi*z(k))
+#if 0 
+!turn off random perturbation !liujie6Debug
     uu      = uu+ufluc
     vv      = vv+vfluc
     ww      = ww+wfluc
+#endif
     rhouu   = rho*uu
     rhovv   = rho*vv
     rhoww   = rho*ww

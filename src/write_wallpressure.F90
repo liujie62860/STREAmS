@@ -19,6 +19,8 @@ subroutine write_wallpressure
   write(chicyc,"(I7.7)") icyc
 !
   !$cuf kernel do(2) <<<*,*>>> 
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz,k_skip_p
    do i=1,nx,i_skip_p
     rho  = w_gpu(i,1,k,1)
@@ -35,6 +37,7 @@ subroutine write_wallpressure
     wallpfield_gpu(i,k) = pp
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
 !
   if(async) then
@@ -76,6 +79,8 @@ subroutine write_wallpressure
    write(chicyc,"(I7.7)") icyc
 !
    !$cuf kernel do(2) <<<*,*>>> 
+   !$omp target 
+   !$omp teams distribute parallel do collapse(2)
    do j=1,ny,j_skip_s
     do i=1,nx,i_skip_s
      rho  = w_gpu(i,j,1,1)
@@ -96,6 +101,7 @@ subroutine write_wallpressure
      slicexy_gpu(5,i,j) =  pp
     enddo
    enddo
+   !$omp end target
    !@cuf iercuda=cudaDeviceSynchronize()
 ! 
    if(async) then

@@ -8,15 +8,21 @@ subroutine computeresidual
  integer :: i,j,k
  real(mykind) :: rntot,rtrms_ib
  real(mykind), dimension(ny) :: rtrms_ib_1d_cpu
+!$omp target enter data map(to:rtrms_ib_gpu, rtrms_ib_1d_gpu)
 !
  !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  do k=1,nz
   do j=1,ny
    rtrms_ib_gpu(j,k) = 0._mykind
   enddo
  enddo
+ !$omp end target 
  !@cuf iercuda=cudaDeviceSynchronize()
  !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  do k=1,nz
   do j=1,ny
    do i=1,nx
@@ -24,21 +30,30 @@ subroutine computeresidual
    enddo
   enddo
  enddo
+ !$omp end target 
  !@cuf iercuda=cudaDeviceSynchronize()
 !
  !$cuf kernel do(1) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(1)
  do j=1,ny
   rtrms_ib_1d_gpu(j) = 0._mykind
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  !$cuf kernel do(1) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(1)
  do j=1,ny
   do k=1,nz
    rtrms_ib_1d_gpu(j) = rtrms_ib_1d_gpu(j) + rtrms_ib_gpu(j,k)
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
+!$omp target exit data map(from:rtrms_ib_gpu, rtrms_ib_1d_gpu)
+
  rtrms_ib_1d_cpu = rtrms_ib_1d_gpu 
 !
  rtrms_ib = 0._mykind

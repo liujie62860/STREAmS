@@ -32,6 +32,8 @@ subroutine rk
 !
 !st = mpi_wtime()
  !$cuf kernel do(3) <<<*,*>>> 
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ny
     do i=1,nx
@@ -42,6 +44,7 @@ subroutine rk
     enddo
    enddo
   enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !et = mpi_wtime()
 !tt = et-st
@@ -109,6 +112,8 @@ subroutine rk
   call bc(1)
 !
  !$cuf kernel do(3) <<<*,*>>> 
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ny
     do i=1,nx
@@ -118,6 +123,7 @@ subroutine rk
     enddo
    enddo
   enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
   if (iflow==0) then
@@ -128,6 +134,8 @@ subroutine rk
 ! Updating solution in inner nodes
 !
  !$cuf kernel do(3) <<<*,*>>> 
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ny
     do i=1,nx
@@ -137,6 +145,7 @@ subroutine rk
     enddo
    enddo
   enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 
 #ifdef USE_CUDA

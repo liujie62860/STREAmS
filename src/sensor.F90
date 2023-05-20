@@ -14,6 +14,8 @@ subroutine sensor
  real(mykind) :: ducloc
 !
  !$cuf kernel do(3) <<<*,*>>> 
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
  do k=1,nz
   do j=1,ny
    do i=1,nx
@@ -67,6 +69,7 @@ subroutine sensor
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
 end subroutine sensor

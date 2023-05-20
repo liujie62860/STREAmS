@@ -12,6 +12,8 @@ subroutine bcwall_staggered(ilat)
  elseif (ilat==2) then ! right side
  elseif (ilat==3) then ! lower side
  !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do i=1,nx
     do l=1,ng
@@ -33,9 +35,12 @@ subroutine bcwall_staggered(ilat)
     enddo
    enddo
   enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  elseif (ilat==4) then  ! upper side
  !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do i=1,nx
     do l=1,ng
@@ -57,6 +62,7 @@ subroutine bcwall_staggered(ilat)
     enddo
    enddo
   enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  elseif (ilat==5) then  ! back side
  elseif (ilat==6) then  ! fore side

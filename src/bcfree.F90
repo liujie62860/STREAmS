@@ -9,6 +9,8 @@ subroutine bcfree(ilat)
 !
  if (ilat==1) then     ! left side
  !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do j=1,ny
     do l=1,ng
@@ -18,6 +20,7 @@ subroutine bcfree(ilat)
     enddo
    enddo
   enddo
+ !$omp end target 
  !@cuf iercuda=cudaDeviceSynchronize()
  endif
 ! 

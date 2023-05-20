@@ -8,6 +8,8 @@ subroutine bcswap_prepare
  integer :: i,j,k,m
 !
  !$cuf kernel do(3) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
  do k=1,nz
   do j=1,ny
    do i=1,ng
@@ -18,8 +20,11 @@ subroutine bcswap_prepare
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  !$cuf kernel do(3) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
  do k=1,nz
   do j=1,ng
    do i=1,nx
@@ -30,9 +35,12 @@ subroutine bcswap_prepare
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  if (ndim==3) then
   !$cuf kernel do(3) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
   do k=1,ng
    do j=1,ny
     do i=1,nx
@@ -43,8 +51,12 @@ subroutine bcswap_prepare
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
+
+!$omp target update from(wbuf1s_gpu, wbuf2s_gpu, wbuf3s_gpu, wbuf4s_gpu, wbuf5s_gpu, wbuf6s_gpu)
+
 !
 end subroutine bcswap_prepare
 
@@ -120,9 +132,13 @@ subroutine bcswap
    endif
  endif
 #endif
+
+!$omp target update to(wbuf1r_gpu, wbuf2r_gpu, wbuf3r_gpu, wbuf4r_gpu, wbuf5r_gpu, wbuf6r_gpu)
 !
  if (ileftx/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ny
     do i=1,ng
@@ -132,10 +148,13 @@ subroutine bcswap
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (irightx/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ny
     do i=1,ng
@@ -145,10 +164,13 @@ subroutine bcswap
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (ilefty/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ng
     do i=1,nx
@@ -158,10 +180,13 @@ subroutine bcswap
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (irighty/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ng
     do i=1,nx
@@ -171,10 +196,13 @@ subroutine bcswap
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (ndim==3) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,ng
    do j=1,ny
     do i=1,nx
@@ -185,6 +213,7 @@ subroutine bcswap
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
 !
@@ -200,6 +229,8 @@ subroutine bcswapdiv_prepare
  integer :: i,j,k,m
 !
  !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  do j=1,ny
   do i=1,ng
    do k=1,nz
@@ -208,8 +239,11 @@ subroutine bcswapdiv_prepare
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
  do j=1,ng
   do i=1,nx
    do k=1,nz
@@ -218,9 +252,12 @@ subroutine bcswapdiv_prepare
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  if (ndim==3) then
   !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
   do j=1,ny
    do i=1,nx
     do k=1,ng
@@ -229,6 +266,7 @@ subroutine bcswapdiv_prepare
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
 !
@@ -239,6 +277,11 @@ subroutine bcswapdiv
 ! Apply virtual interface boundary conditions (flow divergence)
 !
  use mod_streams
+#ifdef USE_OMP_HIP
+  use iso_c_binding
+  use hipfort      ! use hipfort
+  use hipfort_check
+#endif
  implicit none
 !
  integer :: i,j,k,m
@@ -250,7 +293,18 @@ subroutine bcswapdiv
  indy = nx*ng*nz
  indz = nx*ny*ng
 !
+#define USE_CUDA
+#define NOCUDAAWAREMPI
 #if defined(USE_CUDA) && defined(NOCUDAAWAREMPI)
+#ifdef USE_OMP_HIP
+ iermpi = hipMemcpyAsync(divbuf1s, divbuf1s_gpu_HIP, indx, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(divbuf2s, divbuf2s_gpu_HIP, indx, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(divbuf3s, divbuf3s_gpu_HIP, indy, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(divbuf4s, divbuf4s_gpu_HIP, indy, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(divbuf5s, divbuf5s_gpu_HIP, indz, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(divbuf6s, divbuf6s_gpu_HIP, indz, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipStreamSynchronize(stream2)
+#else
  !divbuf1s = divbuf1s_gpu ; divbuf2s = divbuf2s_gpu ; divbuf3s = divbuf3s_gpu
  !divbuf4s = divbuf4s_gpu ; divbuf5s = divbuf5s_gpu ; divbuf6s = divbuf6s_gpu
  iermpi = cudaMemcpyAsync(divbuf1s, divbuf1s_gpu, indx, cudaMemcpyDeviceToHost, stream2)
@@ -260,6 +314,7 @@ subroutine bcswapdiv
  iermpi = cudaMemcpyAsync(divbuf5s, divbuf5s_gpu, indz, cudaMemcpyDeviceToHost, stream2)
  iermpi = cudaMemcpyAsync(divbuf6s, divbuf6s_gpu, indz, cudaMemcpyDeviceToHost, stream2)
  iermpi = cudaStreamSynchronize(stream2)
+#endif
  call mpi_sendrecv(divbuf1s,indx,mpi_prec,ileftx ,1,divbuf2r,indx,mpi_prec,irightx,1,mp_cartx,istatus,iermpi)       
  call mpi_sendrecv(divbuf2s,indx,mpi_prec,irightx,2,divbuf1r,indx,mpi_prec,ileftx ,2,mp_cartx,istatus,iermpi)       
  call mpi_sendrecv(divbuf3s,indy,mpi_prec,ilefty ,3,divbuf4r,indy,mpi_prec,irighty,3,mp_carty,istatus,iermpi)       
@@ -268,6 +323,15 @@ subroutine bcswapdiv
   call mpi_sendrecv(divbuf5s,indz,mpi_prec,ileftz ,5,divbuf6r,indz,mpi_prec,irightz,5,mp_cartz,istatus,iermpi)       
   call mpi_sendrecv(divbuf6s,indz,mpi_prec,irightz,6,divbuf5r,indz,mpi_prec,ileftz ,6,mp_cartz,istatus,iermpi)       
  endif
+#ifdef USE_OMP_HIP
+ iermpi = hipMemcpyAsync(divbuf1r_gpu_HIP, divbuf1r, indx, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(divbuf2r_gpu_HIP, divbuf2r, indx, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(divbuf3r_gpu_HIP, divbuf3r, indy, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(divbuf4r_gpu_HIP, divbuf4r, indy, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(divbuf5r_gpu_HIP, divbuf5r, indz, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(divbuf6r_gpu_HIP, divbuf6r, indz, hipMemcpyHostToDevice, stream2)
+ iermpi = hipStreamSynchronize(stream2)
+#else
  iermpi = cudaMemcpyAsync(divbuf1r_gpu, divbuf1r, indx, cudaMemcpyHostToDevice, stream2)
  iermpi = cudaMemcpyAsync(divbuf2r_gpu, divbuf2r, indx, cudaMemcpyHostToDevice, stream2)
  iermpi = cudaMemcpyAsync(divbuf3r_gpu, divbuf3r, indy, cudaMemcpyHostToDevice, stream2)
@@ -277,6 +341,7 @@ subroutine bcswapdiv
  iermpi = cudaStreamSynchronize(stream2)
  !divbuf1r_gpu = divbuf1r ; divbuf2r_gpu = divbuf2r ; divbuf3r_gpu = divbuf3r
  !divbuf4r_gpu = divbuf4r ; divbuf5r_gpu = divbuf5r ; divbuf6r_gpu = divbuf6r
+#endif
 #else
  if(ileftx == nrank_x) then
   divbuf2r_gpu = divbuf1s_gpu
@@ -302,9 +367,13 @@ subroutine bcswapdiv
   endif
  endif
 #endif
+#undef USE_CUDA
+#undef NOCUDAAWAREMPI
 !
  if (ileftx==mpi_proc_null) then
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do j=1,ny
     do i=1,ng
@@ -312,9 +381,12 @@ subroutine bcswapdiv
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  else
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do j=1,ny
    do i=1,ng
     do k=1,nz
@@ -322,10 +394,13 @@ subroutine bcswapdiv
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (irightx==mpi_proc_null) then
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do j=1,ny
     do i=1,ng
@@ -333,9 +408,12 @@ subroutine bcswapdiv
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  else
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do j=1,ny
    do i=1,ng
     do k=1,nz
@@ -343,10 +421,13 @@ subroutine bcswapdiv
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (ilefty==mpi_proc_null) then
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do i=1,nx
     do j=1,ng
@@ -354,9 +435,12 @@ subroutine bcswapdiv
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  else
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do j=1,ng
    do i=1,nx
     do k=1,nz
@@ -364,10 +448,13 @@ subroutine bcswapdiv
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (irighty==mpi_proc_null) then
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do i=1,nx
     do j=1,ng
@@ -375,9 +462,12 @@ subroutine bcswapdiv
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  else
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do j=1,ng
    do i=1,nx
     do k=1,nz
@@ -385,10 +475,13 @@ subroutine bcswapdiv
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (ndim==3) then
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do j=1,ny
    do i=1,nx
     do k=1,ng
@@ -397,6 +490,7 @@ subroutine bcswapdiv
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
 !
@@ -410,8 +504,11 @@ subroutine bcswapduc_prepare
  implicit none
 !
  integer :: i,j,k,m
+!$omp target enter data map(to:ducros_gpu) 
 !
  !$cuf kernel do(3) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
  do k=1,nz
   do j=1,ny
    do i=1,ng
@@ -420,8 +517,11 @@ subroutine bcswapduc_prepare
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  !$cuf kernel do(3) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
  do k=1,nz
   do j=1,ng
    do i=1,nx
@@ -430,9 +530,12 @@ subroutine bcswapduc_prepare
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  if (ndim==3) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,ng
    do j=1,ny
     do i=1,nx
@@ -441,6 +544,7 @@ subroutine bcswapduc_prepare
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
 !
@@ -511,6 +615,8 @@ subroutine bcswapduc
 !
  if (ileftx/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ny
     do i=1,ng
@@ -518,10 +624,13 @@ subroutine bcswapduc
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (irightx/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ny
     do i=1,ng
@@ -529,10 +638,13 @@ subroutine bcswapduc
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (ilefty/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ng
     do i=1,nx
@@ -540,10 +652,13 @@ subroutine bcswapduc
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (irighty/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ng
     do i=1,nx
@@ -551,10 +666,13 @@ subroutine bcswapduc
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
  if (ndim==3) then
   !$cuf kernel do(3) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(3)
   do k=1,ng
    do j=1,ny
     do i=1,nx
@@ -563,7 +681,9 @@ subroutine bcswapduc
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
 !
+!$omp target exit data map(from:ducros_gpu) 
 end subroutine bcswapduc

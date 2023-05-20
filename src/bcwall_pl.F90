@@ -25,6 +25,8 @@ subroutine bcwall_pl(ilat)
  if (ilat==3) then ! lower side
 ! Redefining g(u)_y on the boundary
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do i=1,nx
     j         = 1 
@@ -183,10 +185,13 @@ subroutine bcwall_pl(ilat)
     fl_gpu(i,j,k,5) = fl_gpu(i,j,k,5) + df * detady_gpu(j)
    enddo  ! end of i-loop 
   enddo  ! end of k-loop
+ !$omp end target 
  !@cuf iercuda=cudaDeviceSynchronize()
  elseif (ilat==4) then ! upper side
 ! Redefining g(u)_y on the boundary
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do i=1,nx
     j         = ny 
@@ -345,6 +350,7 @@ subroutine bcwall_pl(ilat)
     fl_gpu(i,j,k,5) = fl_gpu(i,j,k,5) + df * detady_gpu(j)
    enddo  ! end of i-loop 
   enddo  ! end of k-loop
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  endif 
 !

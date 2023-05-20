@@ -19,6 +19,8 @@ subroutine pgrad
   bulk_5 = 0._mykind
 ! 
   !$cuf kernel do(3) <<<*,*>>> 
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3) reduction(+:bulk_1, bulk_2, bulk_3, bulk_4, bulk_5)
   do k=1,nz
    do j=1,ny
     do i=1,nx
@@ -31,6 +33,7 @@ subroutine pgrad
     enddo
    enddo
   enddo
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
 ! 
   bulk5(1) = bulk_1
@@ -57,6 +60,8 @@ subroutine pgrad
 !
 ! Add forcing terms in momentum and energy equation
  !$cuf kernel do(3) <<<*,*>>> 
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
  do k=1,nz
   do j=1,ny
    do i=1,nx
@@ -67,6 +72,7 @@ subroutine pgrad
    enddo
   enddo
  enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
 !
  end subroutine pgrad

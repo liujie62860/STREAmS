@@ -9,11 +9,18 @@ subroutine euler_i(istart, iend)
 ! Evaluation of convective terms in the x direction
 !
  use mod_streams
+#ifdef USE_OMP_HIP
+  use iso_c_binding
+  use hipfort      ! use hipfort
+  use hipfort_check
+#endif
  implicit none
 !
  integer :: istart, iend
  integer :: endi,endj,endk,lmax,ng2
  real(mykind) :: tt,st,et
+
+#define USE_CUDA
 #ifdef USE_CUDA
  type(dim3) :: grid, tBlock
  integer :: i, j, k, iv, n_th_x, n_th_y
@@ -38,6 +45,22 @@ subroutine euler_i(istart, iend)
  real(mykind) :: r,rho,rhoe,rhom,rhou,rhov,rhow,ri,rip,rp1,up
  real(mykind) :: uu,vp,vv,wc,wp,ww
 #endif
+#ifdef USE_OMP_HIP
+ INTERFACE
+   Subroutine euler_i_kernel_central_hip( grid, block,shmem,hipStream, &
+                            nv, nx, ny, nz, ng, istart, iend, endi, endj, endk, lmax, &
+                            fhat_trans_gpu, temperature_trans_gpu, fl_trans_gpu, &
+                            dcoe_gpu, dcsidx_gpu, wv_trans_gpu) bind(c)
+   use iso_c_binding
+   use hipfort_types
+   implicit none
+   type(dim3) :: grid, block
+   type(c_ptr),value :: hipStream, fhat_trans_gpu, temperature_trans_gpu, &
+                        fl_trans_gpu, dcoe_gpu, dcsidx_gpu, wv_trans_gpu
+   integer(c_int),value :: shmem, nv, nx, ny, nz, ng, istart, iend, endi, endj, endk, lmax
+   End Subroutine euler_i_kernel_central_hip
+ END INTERFACE
+#endif
 !----------------------------------------------------------------------------------------
 !
  endi = nx
@@ -54,6 +77,8 @@ subroutine euler_i(istart, iend)
 #ifdef CUDA_ASYNC
   if(istart == 0+lmax) then
    !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+   !$omp target 
+   !$omp teams distribute parallel do collapse(3)
    do k=1,nz
     do i=1,nx
      do j=1,ny
@@ -63,7 +88,10 @@ subroutine euler_i(istart, iend)
      enddo
     enddo
    enddo
+   !$omp end target
    !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+   !$omp target 
+   !$omp teams distribute parallel do collapse(3)
    do k=1,nz
     do i=1,nx
      do j=1,ny
@@ -71,8 +99,11 @@ subroutine euler_i(istart, iend)
      enddo
     enddo
    enddo
+   !$omp end target
   elseif(istart == 0) then
    !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+   !$omp target 
+   !$omp teams distribute parallel do collapse(3)   
    do k=1,nz
     do i=1-ng,0
      do j=1,ny
@@ -82,7 +113,10 @@ subroutine euler_i(istart, iend)
      enddo
     enddo
    enddo
+   !$omp end target
    !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+   !$omp target 
+   !$omp teams distribute parallel do collapse(3)
    do k=1,nz
     do i=1-ng,0
      do j=1,ny
@@ -90,7 +124,10 @@ subroutine euler_i(istart, iend)
      enddo
     enddo
    enddo
+   !$omp end target
    !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+   !$omp target 
+   !$omp teams distribute parallel do collapse(3)
    do k=1,nz
     do i=nx+1,nx+ng
      do j=1,ny
@@ -100,7 +137,10 @@ subroutine euler_i(istart, iend)
      enddo
     enddo
    enddo
+   !$omp end target
   !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+   !$omp target 
+   !$omp teams distribute parallel do collapse(3)
    do k=1,nz
     do i=nx+1,nx+ng
      do j=1,ny
@@ -108,9 +148,12 @@ subroutine euler_i(istart, iend)
      enddo
     enddo
    enddo
+   !$omp end target
   endif
 #else
 !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do i=1-ng,nx+ng
     do j=1,ny
@@ -120,8 +163,11 @@ subroutine euler_i(istart, iend)
     enddo
    enddo
   enddo
+ !$omp end target
 
 !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do i=1-ng,nx+ng
     do j=1,ny
@@ -129,6 +175,8 @@ subroutine euler_i(istart, iend)
     enddo
    enddo
   enddo
+ !$omp end target
+
 #endif
 
   if(tresduc < 1.0_mykind) then
@@ -136,19 +184,31 @@ subroutine euler_i(istart, iend)
    n_th_y = EULERWENO_THREADS_Y
    tBlock = dim3(n_th_x,n_th_y,1)
    grid = dim3(ceiling(real(endj)/tBlock%x),ceiling(real(endk)/tBlock%y),1)
+#ifdef USE_OMP_HIP
+#else
    call euler_i_kernel<<<grid, tBlock, 0, stream1>>>(nv, nx, ny, nz, ng, ng2, gamma, gm1, &
      iweno, istart, iend, endi, endj, endk, lmax, iorder, iflow, &
      w_gpu, temperature_gpu, ducros_gpu, &
      fhat_trans_gpu, temperature_trans_gpu, fl_trans_gpu, & 
      fhat_gpu, fl_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu, gplus_x, gminus_x, wv_trans_gpu )
+#endif
   else
    n_th_x = EULERCENTRAL_THREADS_X
    n_th_y = EULERCENTRAL_THREADS_Y
    tBlock = dim3(n_th_x,n_th_y,1)
    grid = dim3(ceiling(real(endj)/tBlock%x),ceiling(real(endk)/tBlock%y),1)
+#ifdef USE_OMP_HIP
+   call euler_i_kernel_central_hip( grid, tBlock, 0, hipStream, &
+                     nv, nx, ny, nz, ng, istart, iend, endi, endj, endk, lmax, &
+                     fhat_trans_gpu_ptr, temperature_trans_gpu_ptr, fl_trans_gpu_ptr, &
+                     dcoe_gpu_ptr, dcsidx_gpu_ptr, wv_trans_gpu_ptr)
+   call hipCheck(hipDeviceSynchronize())
+
+#else
    call euler_i_kernel_central<<<grid, tBlock, 0, stream1>>>(nv, nx, ny, nz, ng, &
     istart, iend, endi, endj, endk, lmax, &
     fhat_trans_gpu, temperature_trans_gpu, fl_trans_gpu, dcoe_gpu, dcsidx_gpu, wv_trans_gpu)
+#endif
   endif
 
  !iercuda = cudaGetLastError()
@@ -160,6 +220,8 @@ subroutine euler_i(istart, iend)
 
  if(iend == endi) then
  !$cuf kernel do(3) <<<*,*,stream=stream1>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(3)
   do k=1,nz
    do j=1,ny
     do i=1,nx
@@ -169,6 +231,7 @@ subroutine euler_i(istart, iend)
     enddo
    enddo
   enddo
+ !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
  endif
 
@@ -435,6 +498,7 @@ subroutine euler_i(istart, iend)
  endif
 #endif
 !
+#undef USE_CUDA
 end subroutine euler_i
 
 subroutine euler_j
@@ -442,6 +506,12 @@ subroutine euler_j
 ! Evaluation of convective terms in the y direction
 !
  use mod_streams
+#ifdef USE_OMP_HIP
+  use iso_c_binding
+  use hipfort      ! use hipfort
+  use hipfort_check
+#endif
+#define USE_CUDA
  implicit none
 !
  integer :: endi,endj,endk,jstart,lmax,ng2
@@ -450,6 +520,22 @@ subroutine euler_j
  type(dim3) :: grid, tBlock
  real(mykind) :: tt,st,et
  integer :: n_th_x, n_th_y
+#ifdef USE_OMP_HIP
+ INTERFACE
+   subroutine euler_j_kernel_central_hip( grid, block,shmem,hipStream, &
+                            nv,nx,ny,nz,ng, jstart, jend, endi,endj,endk, lmax,iflow, &
+                            fhat_gpu, temperature_gpu, fl_gpu, &
+                            dcoe_gpu, detady_gpu, wv_gpu) bind(c)
+   use iso_c_binding
+   use hipfort_types
+   implicit none
+   type(dim3) :: grid, block
+   type(c_ptr),value :: hipStream, fhat_gpu, temperature_gpu, &
+                        fl_gpu, dcoe_gpu, detady_gpu, wv_gpu
+   integer(c_int),value :: shmem, nv,nx,ny,nz,ng, jstart,jend, endi,endj,endk, lmax,iflow
+   End subroutine euler_j_kernel_central_hip
+ END INTERFACE
+#endif
 #else
  real(mykind),dimension(5,1-ng:ny+ng) :: uj,fj,ev
  real(mykind),dimension(5) :: evmax
@@ -493,18 +579,29 @@ subroutine euler_j
      n_th_y = EULERWENO_THREADS_Y
      tBlock = dim3(n_th_x,n_th_y,1)
      grid = dim3(ceiling(real(endi)/tBlock%x),ceiling(real(endk)/tBlock%y),1)
+#ifdef USE_OMP_HIP
+#else
      call euler_j_kernel<<<grid, tBlock, 0, stream1>>>(nv, nx, ny, nz, ng, ng2, gamma, gm1, &
          iweno, jstart, 0, endi, endj, endk, lmax, iorder, iflow, & 
          w_gpu, temperature_gpu, ducros_gpu, &
          fhat_gpu, fl_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu, gplus_y, gminus_y, wv_gpu )
+#endif
     else
      n_th_x = EULERCENTRAL_THREADS_X
      n_th_y = EULERCENTRAL_THREADS_Y
      tBlock = dim3(n_th_x,n_th_y,1)
      grid = dim3(ceiling(real(endi)/tBlock%x),ceiling(real(endk)/tBlock%y),1)
+#ifdef USE_OMP_HIP
+   call euler_j_kernel_central_hip( grid, tBlock, 0, hipStream, &
+                     nv, nx, ny, nz, ng, jstart, 0, endi, endj, endk, lmax, iflow, &
+                     fhat_gpu_ptr, temperature_gpu_ptr, fl_gpu_ptr, &
+                     dcoe_gpu_ptr, detady_gpu_ptr, wv_gpu_ptr)
+   call hipCheck(hipDeviceSynchronize())
+#else
      call euler_j_kernel_central<<<grid, tBlock, 0, stream1>>>(nv, nx, ny, nz, ng, &
          jstart, 0, endi, endj, endk, lmax, iflow, &
          temperature_gpu, fhat_gpu, fl_gpu, dcoe_gpu, detady_gpu, wv_gpu)
+#endif
     endif
     !!!!!!!@cuf iercuda=cudaDeviceSynchronize()
 !   et = mpi_wtime()
@@ -768,12 +865,19 @@ subroutine euler_j
  enddo ! end of k-loop
 #endif
 !
+#undef USE_CUDA
 end subroutine euler_j
 
 subroutine euler_k
 !
 ! Evaluation of convective terms in the z direction
 !
+#define USE_CUDA
+#ifdef USE_OMP_HIP
+  use iso_c_binding
+  use hipfort      ! use hipfort
+  use hipfort_check
+#endif
  use mod_streams
  implicit none
 !
@@ -782,6 +886,22 @@ subroutine euler_k
  type(dim3) :: grid, tBlock
  real(mykind) :: tt,st,et
  integer :: n_th_x, n_th_y
+#ifdef USE_OMP_HIP
+ INTERFACE
+   subroutine euler_k_kernel_central_hip( grid, block,shmem,hipStream, &
+                            nv,nx,ny,nz,ng, jstart, jend, endi,endj,endk,lmax, &
+                            fhat_gpu, temperature_gpu, fl_gpu, &
+                            dcoe_gpu, dzitdz_gpu, wv_gpu) bind(c)
+   use iso_c_binding
+   use hipfort_types
+   implicit none
+   type(dim3) :: grid, block
+   type(c_ptr),value :: hipStream, fhat_gpu, temperature_gpu, &
+                        fl_gpu, dcoe_gpu, dzitdz_gpu, wv_gpu
+   integer(c_int),value :: shmem, nv,nx,ny,nz,ng, jstart,jend, endi,endj,endk, lmax
+   End subroutine euler_k_kernel_central_hip
+ END INTERFACE
+#endif
 #else
  real(mykind),dimension(5,1-ng:nz+ng) :: uk,fk,ev
  real(mykind),dimension(5) :: evmax
@@ -825,18 +945,29 @@ subroutine euler_k
      n_th_y = EULERWENO_THREADS_Y
      tBlock = dim3(n_th_x,n_th_y,1)
      grid = dim3(ceiling(real(endi)/tBlock%x),ceiling(real(endj)/tBlock%y),1)
+#ifdef USE_OMP_HIP
+#else
      call euler_k_kernel<<<grid, tBlock>>>(nv, nx, ny, nz, ng, ng2, gamma, gm1, &
          iweno, kstart, 0, endi, endj, endk, lmax, iorder, iflow, &
          w_gpu, temperature_gpu, ducros_gpu, &
          fhat_gpu, fl_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu, gplus_z, gminus_z, wv_gpu )
+#endif
     else
      n_th_x = EULERCENTRAL_THREADS_X
      n_th_y = EULERCENTRAL_THREADS_Y
      tBlock = dim3(n_th_x,n_th_y,1)
      grid = dim3(ceiling(real(endi)/tBlock%x),ceiling(real(endj)/tBlock%y),1)
+#ifdef USE_OMP_HIP
+     call euler_k_kernel_central_hip( grid, tBlock, 0, hipStream, &
+                     nv, nx, ny, nz, ng, kstart, 0, endi, endj, endk, lmax, &
+                     fhat_gpu_ptr, temperature_gpu_ptr, fl_gpu_ptr, &
+                     dcoe_gpu_ptr, dzitdz_gpu_ptr, wv_gpu_ptr)
+     call hipCheck(hipDeviceSynchronize())
+#else
      call euler_k_kernel_central<<<grid, tBlock, 0>>>(nv, nx, ny, nz, ng, &
          kstart, 0, endi, endj, endk, lmax, &
          temperature_gpu, fhat_gpu, fl_gpu, dcoe_gpu, dzitdz_gpu, wv_gpu)
+#endif
     endif
     !@cuf iercuda=cudaDeviceSynchronize()
 !   et = mpi_wtime()
@@ -1096,6 +1227,8 @@ subroutine euler_k
   enddo ! end of i-loop
  enddo ! end of j-loop
 #endif
+
+#undef USE_CUDA
 
  if (ibc(1)==9) then
 #ifdef USE_CUDA

@@ -3,6 +3,9 @@ subroutine startmpi
 ! Initialize MPI (and CUDA) environment
 !
  use mod_streams
+#ifdef USE_OMP_HIP
+ USE hipfort
+#endif
  implicit none
 !
  logical :: reord
@@ -31,6 +34,18 @@ subroutine startmpi
  !write(*,*) "GPU stack enlarged"
  !possible limit arguments are cudaLimitStackSize, cudaLimitPrintfSize, and cudaLimitMallocHeapSize.
 #endif
+
+#ifdef USE_OMP_HIP
+ mydev=0
+ call mpi_comm_split_type(mpi_comm_world,mpi_comm_type_shared,0,mpi_info_null,local_comm,iermpi)
+ call mpi_comm_rank(local_comm,mydev,iermpi)
+ iermpi = hipSetDevice(mydev)
+ call set_device_gpu(mydev) !omp + multi dcu
+ write(*,*) "MPI rank",nrank,"using GPU",mydev
+ call hipCheck(hipStreamCreate(hipStream))
+ call hipCheck(hipStreamCreate(stream2))
+#endif
+
 !
  allocate(ncoords(ndims))
  allocate(nblocks(ndims))

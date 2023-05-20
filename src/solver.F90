@@ -20,7 +20,14 @@ subroutine solver
  else
   dtmin = abs(cfl)
  endif
+
+#ifdef USE_OMP_HIP
+ call allocate_dcu_mem()
+#endif
+
  if (masterproc) write(*,*) 'Done'
+ !$omp target enter data map(to:ducros_gpu)
+ !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
  call updateghost()
  call prims()
  if (tresduc<1._mykind) then
@@ -28,6 +35,8 @@ subroutine solver
   call bcswapduc_prepare()
   call bcswapduc()
  endif
+ !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
+ !$omp target exit data map(from:ducros_gpu)
 !
  open(20,file='output_streams.dat',position=stat_io)
  startTiming = mpi_wtime()
@@ -37,7 +46,11 @@ subroutine solver
 !
   icyc = icyc+1
 !
+
+  !$omp target update to(w_gpu, fln_gpu, fl_gpu, wv_gpu, temperature_gpu, fhat_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu)
   call rk() ! Third-order RK scheme
+  !$omp target update from(w_gpu, fln_gpu, fl_gpu, wv_gpu, temperature_gpu, fhat_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu)
+
   !if(io_type > 0) then
   ! call write_wallpressure
   !endif
@@ -45,8 +58,10 @@ subroutine solver
   if (io_type>0) then
 !
    if (mod(icyc,istat)==0) then
+    !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
     call updateghost()
     call prims()
+    !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
     call copy_gpu_to_cpu()
     if (iflow==-1) then
     elseif (iflow==0) then
@@ -58,8 +73,11 @@ subroutine solver
    endif
 !
    if (telaps>tsol(istore)) then
+    !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
     call updateghost()
     call prims()
+    !$omp target update from(w_gpu, fl_gpu, temperature_gpu)    
+
     call copy_gpu_to_cpu()
     if(enable_plot3d > 0) call writefield()
     if(enable_vtk > 0) call writefieldvtk()
@@ -82,8 +100,10 @@ subroutine solver
   if (io_type==1) then
 !
    if (telaps>tsol_restart(istore_restart)) then
+    !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
     call updateghost()
     call prims()
+    !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
     call copy_gpu_to_cpu()
     call writerst_serial()
     if (iflow==-1) then
@@ -100,8 +120,10 @@ subroutine solver
   elseif (io_type == 2) then
 !
    if (telaps>tsol_restart(istore_restart)) then
+    !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
     call updateghost()
     call prims()
+    !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
     call copy_gpu_to_cpu()
     call writerst()
     if (iflow==-1) then
@@ -120,6 +142,11 @@ subroutine solver
   if (stop_streams) exit
 !
  enddo
+
+#ifdef USE_OMP_HIP
+ call deallocate_dcu_mem() !delete dcu mem
+#endif
+
 !
  endTiming = mpi_wtime()
  elapsed = endTiming-startTiming

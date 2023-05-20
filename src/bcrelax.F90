@@ -59,6 +59,8 @@ subroutine bcrelax(ilat)
 ! Redefining f(u)_x on the boundary
 !
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do j=1,ny
 !
@@ -628,6 +630,7 @@ subroutine bcrelax(ilat)
 !
    enddo  ! end of j-loop 
   enddo  ! end of k-loop
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
 !
  elseif (ilat==3) then  ! lower side
@@ -636,6 +639,8 @@ subroutine bcrelax(ilat)
 ! Redefining g(u)_y on the boundary
 !
   !$cuf kernel do(2) <<<*,*>>>
+  !$omp target 
+  !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do i=1,nx
 !

@@ -1,5 +1,11 @@
 module mod_streams
  use mpi
+#ifdef USE_OMP_HIP
+ use iso_c_binding
+ use omp_lib
+ use hipfort      ! use hipfort
+ use hipfort_check
+#endif
 #ifdef USE_CUDA
   use cudafor
 #endif
@@ -181,6 +187,41 @@ module mod_streams
  real(mykind), dimension(:,:,:,:), allocatable :: gplus_y,gminus_y
  real(mykind), dimension(:,:,:,:), allocatable :: gplus_z,gminus_z
 !
+#ifdef USE_OMP_HIP
+ integer :: local_comm, mydev
+ integer :: omp_info
+ integer(c_int) :: dev
+ integer(c_size_t) :: dev_off, mykindSize, w_order_csize, fl_csize, temperature_csize, indx_csize, indy_csize, indz_csize
+ target :: w_gpu,wv_gpu,wv_trans_gpu,temperature_gpu,temperature_trans_gpu,fl_gpu,fln_gpu,fl_trans_gpu,fhat_gpu, &
+           fhat_trans_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu
+ target :: wbuf1s_gpu, wbuf2s_gpu, wbuf3s_gpu, wbuf4s_gpu, wbuf5s_gpu, wbuf6s_gpu
+ target :: wbuf1r_gpu, wbuf2r_gpu, wbuf3r_gpu, wbuf4r_gpu, wbuf5r_gpu, wbuf6r_gpu
+
+ real(mykind),pointer,dimension(:,:,:,:) :: wbuf1s_gpu_HIP, wbuf2s_gpu_HIP, wbuf3s_gpu_HIP, wbuf4s_gpu_HIP, wbuf5s_gpu_HIP, wbuf6s_gpu_HIP
+ real(mykind),pointer,dimension(:,:,:,:) :: wbuf1r_gpu_HIP, wbuf2r_gpu_HIP, wbuf3r_gpu_HIP, wbuf4r_gpu_HIP, wbuf5r_gpu_HIP, wbuf6r_gpu_HIP
+ real(mykind),pointer,dimension(:,:,:) :: divbuf1s_gpu_HIP, divbuf2s_gpu_HIP, divbuf3s_gpu_HIP, divbuf4s_gpu_HIP, divbuf5s_gpu_HIP, divbuf6s_gpu_HIP
+ real(mykind),pointer,dimension(:,:,:) :: divbuf1r_gpu_HIP, divbuf2r_gpu_HIP, divbuf3r_gpu_HIP, divbuf4r_gpu_HIP, divbuf5r_gpu_HIP, divbuf6r_gpu_HIP
+
+ target :: divbuf1s_gpu, divbuf2s_gpu, divbuf3s_gpu, divbuf4s_gpu, divbuf5s_gpu, divbuf6s_gpu
+ target :: divbuf1r_gpu, divbuf2r_gpu, divbuf3r_gpu, divbuf4r_gpu, divbuf5r_gpu, divbuf6r_gpu
+ target :: ducbuf1s_gpu, ducbuf2s_gpu, ducbuf3s_gpu, ducbuf4s_gpu, ducbuf5s_gpu, ducbuf6s_gpu
+ target :: ducbuf1r_gpu, ducbuf2r_gpu, ducbuf3r_gpu, ducbuf4r_gpu, ducbuf5r_gpu, ducbuf6r_gpu
+ target :: wbuf1s, wbuf2s, wbuf3s, wbuf4s, wbuf5s, wbuf6s
+ target :: wbuf1r, wbuf2r, wbuf3r, wbuf4r, wbuf5r, wbuf6r
+ target :: divbuf1s, divbuf2s, divbuf3s, divbuf4s, divbuf5s, divbuf6s
+ target :: divbuf1r, divbuf2r, divbuf3r, divbuf4r, divbuf5r, divbuf6r
+ target :: ducbuf1s, ducbuf2s, ducbuf3s, ducbuf4s, ducbuf5s, ducbuf6s
+ target :: ducbuf1r, ducbuf2r, ducbuf3r, ducbuf4r, ducbuf5r, ducbuf6r
+
+ type(c_ptr) :: hipStream, stream2
+ type(c_ptr) :: w_gpu_ptr, wv_trans_gpu_ptr, wv_gpu_ptr
+ type(c_ptr) :: dcoe_gpu_ptr
+ type(c_ptr) :: dcsidx_gpu_ptr, detady_gpu_ptr, dzitdz_gpu_ptr
+ type(c_ptr) :: fl_trans_gpu_ptr, fl_gpu_ptr, fln_gpu_ptr
+ type(c_ptr) :: fhat_trans_gpu_ptr, fhat_gpu_ptr
+ type(c_ptr) :: temperature_trans_gpu_ptr, temperature_gpu_ptr
+#endif
+
 #ifdef USE_CUDA
  attributes(device) :: fhat_trans_gpu, fl_trans_gpu
  attributes(device) :: temperature_trans_gpu
@@ -231,6 +272,22 @@ module mod_streams
  attributes(device) :: gplus_x, gminus_x
  attributes(device) :: gplus_y, gminus_y
  attributes(device) :: gplus_z, gminus_z
+#endif
+
+#define USE_OMP
+#ifdef USE_OMP
+ CONTAINS
+   subroutine set_device_gpu(myrank)
+     use omp_lib
+
+     implicit none
+     integer, intent(in) :: myrank
+     logical :: init_omp
+
+     init_omp=omp_in_parallel()
+     call omp_set_default_device(myrank)
+
+   end subroutine set_device_gpu
 #endif
 
 end module mod_streams

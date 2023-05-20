@@ -10,6 +10,8 @@ subroutine bcshk(ilat)
 !
  if (ilat==4) then     ! left side
  !$cuf kernel do(2) <<<*,*>>>
+ !$omp target 
+ !$omp teams distribute parallel do collapse(2)
   do k=1,nz
    do i=1,nx
     do l=0,ng
@@ -33,6 +35,7 @@ subroutine bcshk(ilat)
     enddo
    enddo
   enddo
+ !$omp end target 
  !@cuf iercuda=cudaDeviceSynchronize()
  endif
 !
