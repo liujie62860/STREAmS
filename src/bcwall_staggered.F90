@@ -3,14 +3,31 @@ subroutine bcwall_staggered(ilat)
 ! Apply wall boundary conditions (staggered version)
 !
  use mod_streams
+#ifdef USE_OMP_HIP
+  use iso_c_binding
+  use hipfort      ! use hipfort
+  use hipfort_check
+  use hip_kernels
+#endif
  implicit none
 !
  integer :: i,k,l,ilat
  real(mykind) :: rho,uu,vv,ww,qq,pp,tt,rhoe
+#ifdef USE_OMP_HIP
+ type(dim3) :: grid, tBlock
+#endif
 !
  if (ilat==1) then     ! left side
  elseif (ilat==2) then ! right side
  elseif (ilat==3) then ! lower side
+#ifdef USE_OMP_HIP
+ grid   = dim3(1,nz,1)
+ tBlock = dim3(256,1,1)
+ call hipCheck(hipDeviceSynchronize())
+ call bcwall_staggered_kernel_1(grid, tBlock, 0, hipStream, &
+                   w_gpu_ptr, nx, ny, nz, ng, gm1, gm, t0)
+ call hipCheck(hipDeviceSynchronize())
+#else
  !$cuf kernel do(2) <<<*,*>>>
  !$omp target 
  !$omp teams distribute parallel do collapse(2)
@@ -37,6 +54,7 @@ subroutine bcwall_staggered(ilat)
   enddo
  !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
+#endif
  elseif (ilat==4) then  ! upper side
  !$cuf kernel do(2) <<<*,*>>>
  !$omp target 

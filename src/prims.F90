@@ -3,12 +3,27 @@ subroutine prims
 ! Evaluation of the temperature field
 !
  use mod_streams
+#ifdef USE_OMP_HIP
+  use iso_c_binding
+  use hipfort      ! use hipfort
+  use hipfort_check
+  use hip_kernels
+#endif
  implicit none
 !
  real(mykind) :: rho,rhou,rhov,rhow,rhoe
  real(mykind) :: ri,uu,vv,ww,qq,pp
  integer :: i,j,k
 !
+#ifdef USE_OMP_HIP
+ type(dim3) :: grid, tBlock
+
+ grid   = dim3(ny+2*ng,nz+2*ng,1)
+ tBlock = dim3(128,1,1)
+ call prims_kernel(grid, tBlock, 0, hipStream, &
+                   w_gpu_ptr, wv_gpu_ptr, temperature_gpu_ptr, nx, ny, nz, ng, 0, gm1)
+ call hipCheck(hipDeviceSynchronize()) 
+#else
  !$cuf kernel do(3) <<<*,*>>> 
  !$omp target 
  !$omp teams distribute parallel do collapse(3)
@@ -38,6 +53,7 @@ subroutine prims
  enddo
  !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
+#endif
 !
 end subroutine prims
 

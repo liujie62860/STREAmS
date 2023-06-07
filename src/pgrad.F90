@@ -2,6 +2,12 @@ subroutine pgrad
 !
 ! Evaluate pressure gradient for channel flow
  use mod_streams
+#ifdef USE_OMP_HIP
+  use iso_c_binding
+  use hipfort      ! use hipfort
+  use hipfort_check
+  use hip_kernels
+#endif
 !
  implicit none
 !
@@ -10,6 +16,9 @@ subroutine pgrad
  real(mykind), dimension(5) :: bulk5g
  real(mykind) :: dy,uu
  real(mykind) :: bulk_1,bulk_2,bulk_3,bulk_4,bulk_5
+#ifdef USE_OMP_HIP
+ type(dim3) :: grid, tBlock
+#endif
 !
  if(pgradf == 0._mykind .or. mod(icyc,nprint)==0) then
   bulk_1 = 0._mykind
@@ -59,6 +68,13 @@ subroutine pgrad
  bulk5g_gpu = bulk5g
 !
 ! Add forcing terms in momentum and energy equation
+#ifdef USE_OMP_HIP
+  grid   = dim3(ny,nz,1)
+  tBlock = dim3(128,1,1)
+  call pgrad_kernel_2(grid, tBlock, 0, hipStream, &
+                      wv_gpu_ptr, fln_gpu_ptr, nx, ny, nz, ng, bulk5g(1), bulk5g(2))
+  call hipCheck(hipDeviceSynchronize())
+#else
  !$cuf kernel do(3) <<<*,*>>> 
  !$omp target 
  !$omp teams distribute parallel do collapse(3)
@@ -74,5 +90,6 @@ subroutine pgrad
  enddo
  !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
+#endif
 !
  end subroutine pgrad

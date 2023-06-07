@@ -26,8 +26,10 @@ subroutine solver
 #endif
 
  if (masterproc) write(*,*) 'Done'
- !$omp target enter data map(to:ducros_gpu)
- !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
+
+!$omp target update to(w_gpu, fln_gpu, fl_gpu, wv_gpu, temperature_gpu, fhat_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu, coeff_deriv1_gpu)
+!$omp target update to(coeff_clap_gpu, dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu, wv_trans_gpu, temperature_trans_gpu, fl_trans_gpu, fhat_trans_gpu)
+!$omp target enter data map(to:ducros_gpu, x_gpu, y_gpu, yn_gpu, xg_gpu)
  call updateghost()
  call prims()
  if (tresduc<1._mykind) then
@@ -35,8 +37,6 @@ subroutine solver
   call bcswapduc_prepare()
   call bcswapduc()
  endif
- !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
- !$omp target exit data map(from:ducros_gpu)
 !
  open(20,file='output_streams.dat',position=stat_io)
  startTiming = mpi_wtime()
@@ -47,9 +47,7 @@ subroutine solver
   icyc = icyc+1
 !
 
-  !$omp target update to(w_gpu, fln_gpu, fl_gpu, wv_gpu, temperature_gpu, fhat_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu)
   call rk() ! Third-order RK scheme
-  !$omp target update from(w_gpu, fln_gpu, fl_gpu, wv_gpu, temperature_gpu, fhat_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu)
 
   !if(io_type > 0) then
   ! call write_wallpressure
@@ -58,7 +56,6 @@ subroutine solver
   if (io_type>0) then
 !
    if (mod(icyc,istat)==0) then
-    !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
     call updateghost()
     call prims()
     !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
@@ -73,7 +70,6 @@ subroutine solver
    endif
 !
    if (telaps>tsol(istore)) then
-    !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
     call updateghost()
     call prims()
     !$omp target update from(w_gpu, fl_gpu, temperature_gpu)    
@@ -100,7 +96,6 @@ subroutine solver
   if (io_type==1) then
 !
    if (telaps>tsol_restart(istore_restart)) then
-    !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
     call updateghost()
     call prims()
     !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
@@ -120,7 +115,6 @@ subroutine solver
   elseif (io_type == 2) then
 !
    if (telaps>tsol_restart(istore_restart)) then
-    !$omp target update to(w_gpu, fl_gpu, temperature_gpu)
     call updateghost()
     call prims()
     !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
@@ -143,9 +137,7 @@ subroutine solver
 !
  enddo
 
-#ifdef USE_OMP_HIP
- call deallocate_dcu_mem() !delete dcu mem
-#endif
+!$omp target exit data map(from:ducros_gpu, x_gpu, y_gpu, yn_gpu, xg_gpu)
 
 !
  endTiming = mpi_wtime()

@@ -3,6 +3,13 @@ subroutine allocate_vars()
 ! Allocate variables for the computation
 !
  use mod_streams
+
+#ifdef USE_OMP_HIP
+  use iso_c_binding
+  use hipfort      ! use hipfort
+  use hipfort_check
+#endif
+
  implicit none
 !
 #ifdef USE_CUDA
@@ -79,6 +86,21 @@ subroutine allocate_vars()
  allocate(wbuf4r_gpu(nx,ng,nz,nv))  
  allocate(wbuf5r_gpu(nx,ny,ng,nv))  
  allocate(wbuf6r_gpu(nx,ny,ng,nv))  
+#ifdef USE_OMP_HIP
+ omp_info = hipHostRegister(c_loc(wbuf1s_gpu),INT((ng*ny*nz*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf2s_gpu),INT((ng*ny*nz*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf3s_gpu),INT((nx*ng*nz*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf4s_gpu),INT((nx*ng*nz*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf5s_gpu),INT((nx*ny*ng*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf6s_gpu),INT((nx*ny*ng*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf1r_gpu),INT((ng*ny*nz*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf2r_gpu),INT((ng*ny*nz*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf3r_gpu),INT((nx*ng*nz*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf4r_gpu),INT((nx*ng*nz*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf5r_gpu),INT((nx*ny*ng*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+ omp_info = hipHostRegister(c_loc(wbuf6r_gpu),INT((nx*ny*ng*nv*8),KIND=C_SIZE_T),hipHostRegisterPortable)
+#endif
+
  allocate(divbuf1s_gpu(ng,ny,nz))  
  allocate(divbuf2s_gpu(ng,ny,nz))  
  allocate(divbuf3s_gpu(nx,ng,nz))  
@@ -344,6 +366,14 @@ subroutine allocate_dcu_mem()
  dcsidx_gpu_ptr = omp_target_alloc( size(dcsidx_gpu)*mykindSize, mydev)
  detady_gpu_ptr = omp_target_alloc( size(detady_gpu)*mykindSize, mydev)
  dzitdz_gpu_ptr = omp_target_alloc( size(dzitdz_gpu)*mykindSize, mydev)
+ coeff_deriv1_gpu_ptr = omp_target_alloc( size(coeff_deriv1)*mykindSize, mydev)
+ coeff_clap_gpu_ptr = omp_target_alloc( size(coeff_clap_gpu)*mykindSize, mydev)
+ dcsidx2_gpu_ptr = omp_target_alloc( size(dcsidx2_gpu)*mykindSize, mydev)
+ detady2_gpu_ptr = omp_target_alloc( size(detady2_gpu)*mykindSize, mydev)
+ dzitdz2_gpu_ptr = omp_target_alloc( size(dzitdz2_gpu)*mykindSize, mydev)
+ dcsidxs_gpu_ptr = omp_target_alloc( size(dcsidxs_gpu)*mykindSize, mydev)
+ detadys_gpu_ptr = omp_target_alloc( size(detadys_gpu)*mykindSize, mydev)
+ dzitdzs_gpu_ptr = omp_target_alloc( size(dzitdzs_gpu)*mykindSize, mydev)
 
 #define CALLHIP(x) CALL hipCheck(x)
  CALL hipCheck(hipMalloc(divbuf1s_gpu_HIP, ng, ny, nz))
@@ -358,6 +388,19 @@ subroutine allocate_dcu_mem()
  CALL hipCheck(hipMalloc(divbuf4r_gpu_HIP, nx, ng, nz))
  CALL hipCheck(hipMalloc(divbuf5r_gpu_HIP, nx, ny, ng))
  CALL hipCheck(hipMalloc(divbuf6r_gpu_HIP, nx, ny, ng))
+
+ CALL hipCheck(hipMalloc(ducbuf1s_gpu_HIP, ng, ny, nz))
+ CALL hipCheck(hipMalloc(ducbuf2s_gpu_HIP, ng, ny, nz))
+ CALL hipCheck(hipMalloc(ducbuf3s_gpu_HIP, nx, ng, nz))
+ CALL hipCheck(hipMalloc(ducbuf4s_gpu_HIP, nx, ng, nz))
+ CALL hipCheck(hipMalloc(ducbuf5s_gpu_HIP, nx, ny, ng))
+ CALL hipCheck(hipMalloc(ducbuf6s_gpu_HIP, nx, ny, ng))
+ CALL hipCheck(hipMalloc(ducbuf1r_gpu_HIP, ng, ny, nz))
+ CALL hipCheck(hipMalloc(ducbuf2r_gpu_HIP, ng, ny, nz))
+ CALL hipCheck(hipMalloc(ducbuf3r_gpu_HIP, nx, ng, nz))
+ CALL hipCheck(hipMalloc(ducbuf4r_gpu_HIP, nx, ng, nz))
+ CALL hipCheck(hipMalloc(ducbuf5r_gpu_HIP, nx, ny, ng))
+ CALL hipCheck(hipMalloc(ducbuf6r_gpu_HIP, nx, ny, ng))
 
  CALLHIP(hipMalloc(wbuf1s_gpu_HIP, ng, ny, nz,nv))
  CALLHIP(hipMalloc(wbuf2s_gpu_HIP, ng, ny, nz,nv))
@@ -387,6 +430,15 @@ subroutine allocate_dcu_mem()
  omp_info = omp_target_associate_ptr(c_loc(dcsidx_gpu), dcsidx_gpu_ptr, size(dcsidx)*mykindSize, dev_off, mydev)
  omp_info = omp_target_associate_ptr(c_loc(detady_gpu), detady_gpu_ptr, size(detady)*mykindSize, dev_off, mydev)
  omp_info = omp_target_associate_ptr(c_loc(dzitdz_gpu), dzitdz_gpu_ptr, size(dzitdz)*mykindSize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(coeff_deriv1_gpu), coeff_deriv1_gpu_ptr, size(coeff_deriv1)*mykindSize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(coeff_clap_gpu), coeff_clap_gpu_ptr, size(coeff_clap_gpu)*mykindSize, dev_off, mydev)
+ 
+ omp_info = omp_target_associate_ptr(c_loc(dcsidx2_gpu), dcsidx2_gpu_ptr, size(dcsidx2)*mykindSize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(detady2_gpu), detady2_gpu_ptr, size(detady2)*mykindSize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(dzitdz2_gpu), dzitdz2_gpu_ptr, size(dzitdz2)*mykindSize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(dcsidxs_gpu), dcsidxs_gpu_ptr, size(dcsidxs)*mykindSize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(detadys_gpu), detadys_gpu_ptr, size(detadys)*mykindSize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(dzitdzs_gpu), dzitdzs_gpu_ptr, size(dzitdzs)*mykindSize, dev_off, mydev)
 
  omp_info = omp_target_associate_ptr(c_loc(wbuf1s_gpu), c_loc(wbuf1s_gpu_HIP), indx_csize*nv, dev_off, mydev)
  omp_info = omp_target_associate_ptr(c_loc(wbuf2s_gpu), c_loc(wbuf2s_gpu_HIP), indx_csize*nv, dev_off, mydev)
@@ -414,25 +466,27 @@ subroutine allocate_dcu_mem()
  omp_info = omp_target_associate_ptr(c_loc(divbuf5r_gpu), c_loc(divbuf5r_gpu_HIP), indz_csize, dev_off, mydev)
  omp_info = omp_target_associate_ptr(c_loc(divbuf6r_gpu), c_loc(divbuf6r_gpu_HIP), indz_csize, dev_off, mydev)
 
-#if 0
- omp_info = omp_target_associate_ptr(c_loc(ducbuf1s_gpu), ducbuf1s_gpu_ptr, indx_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf2s_gpu), ducbuf2s_gpu_ptr, indx_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf3s_gpu), ducbuf3s_gpu_ptr, indy_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf4s_gpu), ducbuf4s_gpu_ptr, indy_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf5s_gpu), ducbuf5s_gpu_ptr, indz_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf6s_gpu), ducbuf6s_gpu_ptr, indz_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf1r_gpu), ducbuf1r_gpu_ptr, indx_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf2r_gpu), ducbuf2r_gpu_ptr, indx_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf3r_gpu), ducbuf3r_gpu_ptr, indy_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf4r_gpu), ducbuf4r_gpu_ptr, indy_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf5r_gpu), ducbuf5r_gpu_ptr, indz_csize, dev_off, mydev)
- omp_info = omp_target_associate_ptr(c_loc(ducbuf6r_gpu), ducbuf6r_gpu_ptr, indz_csize, dev_off, mydev)
-#endif
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf1s_gpu), c_loc(ducbuf1s_gpu_HIP), indx_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf2s_gpu), c_loc(ducbuf2s_gpu_HIP), indx_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf3s_gpu), c_loc(ducbuf3s_gpu_HIP), indy_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf4s_gpu), c_loc(ducbuf4s_gpu_HIP), indy_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf5s_gpu), c_loc(ducbuf5s_gpu_HIP), indz_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf6s_gpu), c_loc(ducbuf6s_gpu_HIP), indz_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf1r_gpu), c_loc(ducbuf1r_gpu_HIP), indx_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf2r_gpu), c_loc(ducbuf2r_gpu_HIP), indx_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf3r_gpu), c_loc(ducbuf3r_gpu_HIP), indy_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf4r_gpu), c_loc(ducbuf4r_gpu_HIP), indy_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf5r_gpu), c_loc(ducbuf5r_gpu_HIP), indz_csize, dev_off, mydev)
+ omp_info = omp_target_associate_ptr(c_loc(ducbuf6r_gpu), c_loc(ducbuf6r_gpu_HIP), indz_csize, dev_off, mydev)
 
 end subroutine allocate_dcu_mem
 
 subroutine deallocate_dcu_mem()
  use mod_streams
+
+ call move_alloc(w_order, w_gpu)
+ call move_alloc(temperature, temperature_gpu)
+ call move_alloc(fl, fl_gpu)
 
  omp_info = omp_target_disassociate_ptr(c_loc(w_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(wv_gpu), mydev)
@@ -443,12 +497,24 @@ subroutine deallocate_dcu_mem()
  omp_info = omp_target_disassociate_ptr(c_loc(fln_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(fl_trans_gpu), mydev)
 
+ call move_alloc(w_gpu, w_order)
+ call move_alloc(temperature_gpu , temperature)
+ call move_alloc(fl_gpu, fl)
+
  omp_info = omp_target_disassociate_ptr(c_loc(fhat_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(fhat_trans_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(dcoe_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(dcsidx_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(detady_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(dzitdz_gpu), mydev)
+ omp_info = omp_target_disassociate_ptr(c_loc(coeff_deriv1_gpu), mydev)
+ omp_info = omp_target_disassociate_ptr(c_loc(coeff_clap_gpu), mydev)
+ omp_info = omp_target_disassociate_ptr(c_loc(dcsidx2_gpu), mydev)
+ omp_info = omp_target_disassociate_ptr(c_loc(detady2_gpu), mydev)
+ omp_info = omp_target_disassociate_ptr(c_loc(dzitdz2_gpu), mydev)
+ omp_info = omp_target_disassociate_ptr(c_loc(dcsidxs_gpu), mydev)
+ omp_info = omp_target_disassociate_ptr(c_loc(detadys_gpu), mydev)
+ omp_info = omp_target_disassociate_ptr(c_loc(dzitdzs_gpu), mydev)
 
  call omp_target_free(w_gpu_ptr, mydev)
  call omp_target_free(wv_gpu_ptr, mydev)
@@ -464,6 +530,14 @@ subroutine deallocate_dcu_mem()
  call omp_target_free(dcsidx_gpu_ptr, mydev)
  call omp_target_free(detady_gpu_ptr, mydev)
  call omp_target_free(dzitdz_gpu_ptr, mydev)
+ call omp_target_free(coeff_deriv1_gpu_ptr, mydev) 
+ call omp_target_free(coeff_clap_gpu_ptr, mydev)
+ call omp_target_free(dcsidx2_gpu_ptr, mydev)
+ call omp_target_free(detady2_gpu_ptr, mydev)
+ call omp_target_free(dzitdz2_gpu_ptr, mydev)
+ call omp_target_free(dcsidxs_gpu_ptr, mydev)
+ call omp_target_free(detadys_gpu_ptr, mydev)
+ call omp_target_free(dzitdzs_gpu_ptr, mydev)
 
  omp_info = omp_target_disassociate_ptr(c_loc(wbuf1s_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(wbuf2s_gpu), mydev)
@@ -491,7 +565,6 @@ subroutine deallocate_dcu_mem()
  omp_info = omp_target_disassociate_ptr(c_loc(divbuf5r_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(divbuf6r_gpu), mydev)
 
-#if 0
  omp_info = omp_target_disassociate_ptr(c_loc(ducbuf1s_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(ducbuf2s_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(ducbuf3s_gpu), mydev)
@@ -504,7 +577,6 @@ subroutine deallocate_dcu_mem()
  omp_info = omp_target_disassociate_ptr(c_loc(ducbuf4r_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(ducbuf5r_gpu), mydev)
  omp_info = omp_target_disassociate_ptr(c_loc(ducbuf6r_gpu), mydev)
-#endif
 
 #define CALL_OMPFREE(x)  CALL omp_target_free(x, mydev)
 #define CALLHIP(x) CALL hipCheck(x)
@@ -534,5 +606,18 @@ CALLHIP( hipFree(divbuf3r_gpu_HIP) )
 CALLHIP( hipFree(divbuf4r_gpu_HIP) )
 CALLHIP( hipFree(divbuf5r_gpu_HIP) )
 CALLHIP( hipFree(divbuf6r_gpu_HIP) )
+
+CALLHIP( hipFree(ducbuf1s_gpu_HIP) )
+CALLHIP( hipFree(ducbuf2s_gpu_HIP) )
+CALLHIP( hipFree(ducbuf3s_gpu_HIP) )
+CALLHIP( hipFree(ducbuf4s_gpu_HIP) )
+CALLHIP( hipFree(ducbuf5s_gpu_HIP) )
+CALLHIP( hipFree(ducbuf6s_gpu_HIP) )
+CALLHIP( hipFree(ducbuf1r_gpu_HIP) )
+CALLHIP( hipFree(ducbuf2r_gpu_HIP) )
+CALLHIP( hipFree(ducbuf3r_gpu_HIP) )
+CALLHIP( hipFree(ducbuf4r_gpu_HIP) )
+CALLHIP( hipFree(ducbuf5r_gpu_HIP) )
+CALLHIP( hipFree(ducbuf6r_gpu_HIP) )
 
 end subroutine deallocate_dcu_mem

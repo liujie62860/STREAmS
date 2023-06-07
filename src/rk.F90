@@ -4,6 +4,12 @@ subroutine rk
 !
  use mod_streams
  use mod_euler
+#ifdef USE_OMP_HIP
+  use iso_c_binding
+  use hipfort      ! use hipfort
+  use hipfort_check
+  use hip_kernels
+#endif
  implicit none
 !
  integer :: i,j,k,m,istep,ilat
@@ -11,6 +17,10 @@ subroutine rk
  real(mykind) :: elapsed,startTiming,endTiming
 !
  real(mykind) :: tt,st,et
+#ifdef USE_OMP_HIP
+ type(dim3) :: grid, tBlock
+!#define CUDA_ASYNC
+#endif
 !
  if (cfl>0._mykind) then
   dt = dtmin*cfl 
@@ -31,6 +41,13 @@ subroutine rk
   alpdt = alp*dt
 !
 !st = mpi_wtime()
+#ifdef USE_OMP_HIP
+ grid   = dim3(ny,nz,nv)
+ tBlock = dim3(64,1,1)
+ call rk_kernel_fln_fl(grid, tBlock, 0, hipStream, &
+                    fln_gpu_ptr, fl_gpu_ptr, nx, ny, nz, rhodt)
+ call hipCheck(hipDeviceSynchronize())
+#else
  !$cuf kernel do(3) <<<*,*>>> 
  !$omp target 
  !$omp teams distribute parallel do collapse(3)
@@ -46,6 +63,7 @@ subroutine rk
   enddo
  !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
+#endif
 !et = mpi_wtime()
 !tt = et-st
 !if (masterproc) write(error_unit,*) 'RK-I time =', tt
@@ -110,8 +128,17 @@ subroutine rk
 !
 ! Call to non-reflecting b.c. (to update f_x, g_y and h_z on the boundaries)
   call bc(1)
-!
- !$cuf kernel do(3) <<<*,*>>> 
+! 
+#ifdef USE_OMP_HIP 
+!#undef CUDA_ASYNC
+! call hipCheck(hipDeviceSynchronize())
+ grid   = dim3(ny,nz,nv)
+ tBlock = dim3(64,1,1)
+ call rk_kernel_fln(grid, tBlock, 0, hipStream, &
+                    fln_gpu_ptr, fl_gpu_ptr, nx, ny, nz, gamdt)
+ call hipCheck(hipDeviceSynchronize())
+#else
+ !$cuf kernel do(3) <<<*,*>>>
  !$omp target 
  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
@@ -125,6 +152,7 @@ subroutine rk
   enddo
  !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
+#endif
 !
   if (iflow==0) then
    call pgrad()
@@ -132,8 +160,15 @@ subroutine rk
   endif
 !
 ! Updating solution in inner nodes
-!
- !$cuf kernel do(3) <<<*,*>>> 
+! 
+#ifdef USE_OMP_HIP
+ grid   = dim3(ny,nz,nv)
+ tBlock = dim3(64,1,1)
+ call rk_kernel_w_fln(grid, tBlock, 0, hipStream, &
+                      w_gpu_ptr, fln_gpu_ptr, nx, ny, nz, ng)
+ call hipCheck(hipDeviceSynchronize())
+#else
+ !$cuf kernel do(3) <<<*,*>>>
  !$omp target 
  !$omp teams distribute parallel do collapse(3)
   do k=1,nz
@@ -147,6 +182,7 @@ subroutine rk
   enddo
  !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
+#endif
 
 #ifdef USE_CUDA
  iercuda = cudaGetLastError()

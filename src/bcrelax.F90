@@ -1307,6 +1307,7 @@ subroutine bcrelax(ilat)
     fl_gpu(i,j,k,5) = fl_gpu(i,j,k,5) + df * detady_gpu(j)
    enddo  ! end of i-loop 
   enddo  ! end of k-loop
+  !$omp end target
   !@cuf iercuda=cudaDeviceSynchronize()
 !
  elseif (ilat==5) then  ! back side

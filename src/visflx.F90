@@ -3,6 +3,12 @@ subroutine visflx
 ! Evaluation of the viscous fluxes
 !
  use mod_streams
+#ifdef USE_OMP_HIP
+ use iso_c_binding
+ use hipfort      ! use hipfort
+ use hipfort_check
+ use hip_kernels
+#endif
  implicit none
 !
  integer :: i,j,k,l
@@ -25,13 +31,25 @@ subroutine visflx
 !
  real(mykind) :: ttt,st,et
 !
+#ifdef USE_OMP_HIP
+ type(dim3) :: grid, tBlock
+#endif
  sqgmr2  = sqgmr*(1._mykind+s2tinf)
  sqgmr2h = sqgmr2*0.5_mykind
 !
 !Update viscous fluxes
 !
 !st = mpi_wtime()
-
+#ifdef USE_OMP_HIP
+ grid   = dim3(ny,nz,1)
+ tBlock = dim3(64,1,1)
+ call visflx_kernel(grid, tBlock, 0, hipStream, &
+                   wv_gpu_ptr, fhat_gpu_ptr, fl_gpu_ptr, nx, ny, nz, ng, coeff_deriv1_gpu_ptr, &
+                   dcsidx_gpu_ptr, detady_gpu_ptr, dzitdz_gpu_ptr, temperature_gpu_ptr, dcsidx2_gpu_ptr, &
+                   detady2_gpu_ptr, dzitdz2_gpu_ptr, coeff_clap_gpu_ptr, dcsidxs_gpu_ptr, detadys_gpu_ptr, &
+                   dzitdzs_gpu_ptr, sqgmr2, s2tinf, sqgmr, vtexp, ggmopr, ivis, visc_type)
+ call hipCheck(hipDeviceSynchronize())
+#else
  !$cuf kernel do(2) <<<*,*>>>
  !$omp target 
  !$omp teams distribute parallel do collapse(2)
@@ -173,6 +191,7 @@ subroutine visflx
  enddo
  !$omp end target
  !@cuf iercuda=cudaDeviceSynchronize()
+#endif
 
 !et = mpi_wtime()
 !ttt = et-st
@@ -185,6 +204,13 @@ subroutine visflx_div
 ! Evaluation of the viscous fluxes (add terms with flow divergence)
 !
  use mod_streams
+#ifdef USE_OMP_HIP
+ use iso_c_binding
+ use hipfort      ! use hipfort
+ use hipfort_check
+ use hip_kernels
+#endif
+
  implicit none
 !
  integer :: i,j,k,l
@@ -195,6 +221,9 @@ subroutine visflx_div
  real(mykind) :: sqgmr2,sqgmr2h,tt2,sqrtt,sdivt,sdivt1
 !
  real(mykind) :: ttt,st,et
+#ifdef USE_OMP_HIP
+ type(dim3) :: grid, tBlock
+#endif
 !
  sqgmr2  = sqgmr*(1._mykind+s2tinf)
  sqgmr2h = sqgmr2*0.5_mykind
@@ -203,6 +232,15 @@ subroutine visflx_div
 !
 !st = mpi_wtime()
 !
+#ifdef USE_OMP_HIP
+ grid   = dim3(ny,nz,1)
+ tBlock = dim3(128,1,1)
+ call visflx_div_kernel(grid, tBlock, 0, hipStream, &
+                   wv_gpu_ptr, fhat_gpu_ptr, fl_gpu_ptr, nx, ny, nz, ng, coeff_deriv1_gpu_ptr, &
+                   dcsidx_gpu_ptr, detady_gpu_ptr, dzitdz_gpu_ptr, temperature_gpu_ptr, sqgmr2, s2tinf, &
+                   sqgmr, vtexp, ivis, visc_type)
+ call hipCheck(hipDeviceSynchronize())
+#else
  !$cuf kernel do(3) <<<*,*,stream=stream1>>>
  !$omp target 
  !$omp teams distribute parallel do collapse(3)
@@ -253,6 +291,7 @@ subroutine visflx_div
  enddo
  !$omp end target
  !!!!@cuf iercuda=cudaDeviceSynchronize()
+#endif
 !et = mpi_wtime()
 !ttt = et-st
 !if (masterproc) write(error_unit,*) 'Viscous-II time =', ttt

@@ -55,8 +55,6 @@ subroutine bcswap_prepare
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
 
-!$omp target update from(wbuf1s_gpu, wbuf2s_gpu, wbuf3s_gpu, wbuf4s_gpu, wbuf5s_gpu, wbuf6s_gpu)
-
 !
 end subroutine bcswap_prepare
 
@@ -76,7 +74,20 @@ subroutine bcswap
  indy = nv*nx*ng*nz
  indz = nv*nx*ny*ng
 !
+#ifdef USE_OMP_HIP
+#define USE_CUDA
+#define NOCUDAAWAREMPI
+#endif
 #if defined(USE_CUDA) && defined(NOCUDAAWAREMPI)
+#ifdef USE_OMP_HIP
+ iermpi = hipMemcpyAsync(wbuf1s_gpu, wbuf1s_gpu_HIP, indx, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(wbuf2s_gpu, wbuf2s_gpu_HIP, indx, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(wbuf3s_gpu, wbuf3s_gpu_HIP, indy, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(wbuf4s_gpu, wbuf4s_gpu_HIP, indy, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(wbuf5s_gpu, wbuf5s_gpu_HIP, indz, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipMemcpyAsync(wbuf6s_gpu, wbuf6s_gpu_HIP, indz, hipMemcpyDeviceToHost, stream2)
+ iermpi = hipStreamSynchronize(stream2)
+#else
  iermpi = cudaMemcpyAsync(wbuf1s, wbuf1s_gpu, indx, cudaMemcpyDeviceToHost, stream2)
  iermpi = cudaMemcpyAsync(wbuf2s, wbuf2s_gpu, indx, cudaMemcpyDeviceToHost, stream2)
  iermpi = cudaMemcpyAsync(wbuf3s, wbuf3s_gpu, indy, cudaMemcpyDeviceToHost, stream2)
@@ -84,6 +95,7 @@ subroutine bcswap
  iermpi = cudaMemcpyAsync(wbuf5s, wbuf5s_gpu, indz, cudaMemcpyDeviceToHost, stream2)
  iermpi = cudaMemcpyAsync(wbuf6s, wbuf6s_gpu, indz, cudaMemcpyDeviceToHost, stream2)
  iermpi = cudaStreamSynchronize(stream2)
+#endif
  !wbuf1s = wbuf1s_gpu ; wbuf2s = wbuf2s_gpu ; wbuf3s = wbuf3s_gpu 
  !wbuf4s = wbuf4s_gpu ; wbuf5s = wbuf5s_gpu ; wbuf6s = wbuf6s_gpu 
  call mpi_sendrecv(wbuf1s,indx,mpi_prec,ileftx ,1,wbuf2r,indx,mpi_prec,irightx,1,mp_cartx,istatus,iermpi)       
@@ -94,6 +106,24 @@ subroutine bcswap
    call mpi_sendrecv(wbuf5s,indz,mpi_prec,ileftz ,5,wbuf6r,indz,mpi_prec,irightz,5,mp_cartz,istatus,iermpi)       
    call mpi_sendrecv(wbuf6s,indz,mpi_prec,irightz,6,wbuf5r,indz,mpi_prec,ileftz ,6,mp_cartz,istatus,iermpi)       
  endif
+#ifdef USE_OMP_HIP
+ call mpi_sendrecv(wbuf1s_gpu,indx,mpi_prec,ileftx,1,wbuf2r_gpu,indx,mpi_prec,irightx,1,mp_cartx,istatus,iermpi)
+ call mpi_sendrecv(wbuf2s_gpu,indx,mpi_prec,irightx,2,wbuf1r_gpu,indx,mpi_prec,ileftx,2,mp_cartx,istatus,iermpi)
+ call mpi_sendrecv(wbuf3s_gpu,indy,mpi_prec,ilefty,3,wbuf4r_gpu,indy,mpi_prec,irighty,3,mp_carty,istatus,iermpi)
+ call mpi_sendrecv(wbuf4s_gpu,indy,mpi_prec,irighty,4,wbuf3r_gpu,indy,mpi_prec,ilefty,4,mp_carty,istatus,iermpi)
+ if (ndim==3) then
+   call mpi_sendrecv(wbuf5s_gpu,indz,mpi_prec,ileftz,5,wbuf6r_gpu,indz,mpi_prec,irightz,5,mp_cartz,istatus,iermpi)
+   call mpi_sendrecv(wbuf6s_gpu,indz,mpi_prec,irightz,6,wbuf5r_gpu,indz,mpi_prec,ileftz,6,mp_cartz,istatus,iermpi)
+ endif
+
+ iermpi = hipMemcpyAsync(wbuf1r_gpu_HIP, wbuf1r_gpu, indx, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(wbuf2r_gpu_HIP, wbuf2r_gpu, indx, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(wbuf3r_gpu_HIP, wbuf3r_gpu, indy, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(wbuf4r_gpu_HIP, wbuf4r_gpu, indy, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(wbuf5r_gpu_HIP, wbuf5r_gpu, indz, hipMemcpyHostToDevice, stream2)
+ iermpi = hipMemcpyAsync(wbuf6r_gpu_HIP, wbuf6r_gpu, indz, hipMemcpyHostToDevice, stream2)
+ iermpi = hipStreamSynchronize(stream2)
+#else
  iermpi = cudaMemcpyAsync(wbuf1r_gpu, wbuf1r, indx, cudaMemcpyHostToDevice, stream2)
  iermpi = cudaMemcpyAsync(wbuf2r_gpu, wbuf2r, indx, cudaMemcpyHostToDevice, stream2)
  iermpi = cudaMemcpyAsync(wbuf3r_gpu, wbuf3r, indy, cudaMemcpyHostToDevice, stream2)
@@ -103,6 +133,7 @@ subroutine bcswap
  iermpi = cudaStreamSynchronize(stream2)
  !wbuf1r_gpu = wbuf1r ; wbuf2r_gpu = wbuf2r ; wbuf3r_gpu = wbuf3r
  !wbuf4r_gpu = wbuf4r ; wbuf5r_gpu = wbuf5r ; wbuf6r_gpu = wbuf6r
+#endif
 #else
  ! http://developer.download.nvidia.com/compute/cuda/2_3/toolkit/docs/online/group__CUDART__MEMORY_ge4366f68c6fa8c85141448f187d2aa13.html
  ! IMPORTANT NOTE: Copies with kind == cudaMemcpyDeviceToDevice are asynchronous
@@ -132,8 +163,10 @@ subroutine bcswap
    endif
  endif
 #endif
-
-!$omp target update to(wbuf1r_gpu, wbuf2r_gpu, wbuf3r_gpu, wbuf4r_gpu, wbuf5r_gpu, wbuf6r_gpu)
+#ifdef USE_OMP_HIP
+#undef USE_CUDA
+#undef NOCUDAAWAREMPI
+#endif
 !
  if (ileftx/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
@@ -548,6 +581,7 @@ subroutine bcswapduc_prepare
   !@cuf iercuda=cudaDeviceSynchronize()
  endif
 !
+!$omp target update to(ducbuf1s_gpu, ducbuf2s_gpu, ducbuf3s_gpu, ducbuf4s_gpu, ducbuf5s_gpu, ducbuf6s_gpu)
 end subroutine bcswapduc_prepare
 
 subroutine bcswapduc
@@ -613,6 +647,7 @@ subroutine bcswapduc
  endif
 #endif
 !
+!$omp target update to(ducbuf1r_gpu, ducbuf2r_gpu, ducbuf3r_gpu, ducbuf4r_gpu, ducbuf5r_gpu, ducbuf6r_gpu)
  if (ileftx/=mpi_proc_null) then
   !$cuf kernel do(3) <<<*,*>>>
   !$omp target 

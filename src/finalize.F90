@@ -8,9 +8,11 @@ subroutine finalize
  logical :: opened_wallp,  opened_slicexy
  real(mykind) :: elapsed,startTiming,endTiming
 !
+!$omp target update to(w_gpu, fl_gpu, temperature_gpu)
  if (io_type == 1) then
   call updateghost()
   call prims()
+  !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
   call copy_gpu_to_cpu()
   call mpi_barrier(mpi_comm_world, iermpi)
   startTiming = mpi_wtime()
@@ -31,6 +33,7 @@ subroutine finalize
  elseif (io_type == 2) then
   call updateghost()
   call prims()
+  !$omp target update from(w_gpu, fl_gpu, temperature_gpu)
   call copy_gpu_to_cpu()
   startTiming = mpi_wtime()
   call writerst()
@@ -47,5 +50,8 @@ subroutine finalize
    call writedf()
   endif
  endif
+#ifdef USE_OMP_HIP
+ call deallocate_dcu_mem() !delete dcu mem
+#endif
 !
 end subroutine finalize

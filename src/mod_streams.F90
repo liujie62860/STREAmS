@@ -193,14 +193,18 @@ module mod_streams
  integer(c_int) :: dev
  integer(c_size_t) :: dev_off, mykindSize, w_order_csize, fl_csize, temperature_csize, indx_csize, indy_csize, indz_csize
  target :: w_gpu,wv_gpu,wv_trans_gpu,temperature_gpu,temperature_trans_gpu,fl_gpu,fln_gpu,fl_trans_gpu,fhat_gpu, &
-           fhat_trans_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu
+           fhat_trans_gpu, dcoe_gpu, dcsidx_gpu, detady_gpu, dzitdz_gpu, coeff_deriv1_gpu, coeff_clap_gpu
  target :: wbuf1s_gpu, wbuf2s_gpu, wbuf3s_gpu, wbuf4s_gpu, wbuf5s_gpu, wbuf6s_gpu
  target :: wbuf1r_gpu, wbuf2r_gpu, wbuf3r_gpu, wbuf4r_gpu, wbuf5r_gpu, wbuf6r_gpu
+ target :: dcsidx2_gpu, detady2_gpu, dzitdz2_gpu, dcsidxs_gpu, detadys_gpu, dzitdzs_gpu
 
  real(mykind),pointer,dimension(:,:,:,:) :: wbuf1s_gpu_HIP, wbuf2s_gpu_HIP, wbuf3s_gpu_HIP, wbuf4s_gpu_HIP, wbuf5s_gpu_HIP, wbuf6s_gpu_HIP
  real(mykind),pointer,dimension(:,:,:,:) :: wbuf1r_gpu_HIP, wbuf2r_gpu_HIP, wbuf3r_gpu_HIP, wbuf4r_gpu_HIP, wbuf5r_gpu_HIP, wbuf6r_gpu_HIP
  real(mykind),pointer,dimension(:,:,:) :: divbuf1s_gpu_HIP, divbuf2s_gpu_HIP, divbuf3s_gpu_HIP, divbuf4s_gpu_HIP, divbuf5s_gpu_HIP, divbuf6s_gpu_HIP
  real(mykind),pointer,dimension(:,:,:) :: divbuf1r_gpu_HIP, divbuf2r_gpu_HIP, divbuf3r_gpu_HIP, divbuf4r_gpu_HIP, divbuf5r_gpu_HIP, divbuf6r_gpu_HIP
+
+ real(mykind),pointer,dimension(:,:,:) :: ducbuf1s_gpu_HIP, ducbuf2s_gpu_HIP, ducbuf3s_gpu_HIP, ducbuf4s_gpu_HIP, ducbuf5s_gpu_HIP, ducbuf6s_gpu_HIP
+ real(mykind),pointer,dimension(:,:,:) :: ducbuf1r_gpu_HIP, ducbuf2r_gpu_HIP, ducbuf3r_gpu_HIP, ducbuf4r_gpu_HIP, ducbuf5r_gpu_HIP, ducbuf6r_gpu_HIP
 
  target :: divbuf1s_gpu, divbuf2s_gpu, divbuf3s_gpu, divbuf4s_gpu, divbuf5s_gpu, divbuf6s_gpu
  target :: divbuf1r_gpu, divbuf2r_gpu, divbuf3r_gpu, divbuf4r_gpu, divbuf5r_gpu, divbuf6r_gpu
@@ -215,8 +219,10 @@ module mod_streams
 
  type(c_ptr) :: hipStream, stream2
  type(c_ptr) :: w_gpu_ptr, wv_trans_gpu_ptr, wv_gpu_ptr
- type(c_ptr) :: dcoe_gpu_ptr
+ type(c_ptr) :: dcoe_gpu_ptr, coeff_deriv1_gpu_ptr, coeff_clap_gpu_ptr
  type(c_ptr) :: dcsidx_gpu_ptr, detady_gpu_ptr, dzitdz_gpu_ptr
+ type(c_ptr) :: dcsidx2_gpu_ptr, detady2_gpu_ptr, dzitdz2_gpu_ptr 
+ type(c_ptr) :: dcsidxs_gpu_ptr, detadys_gpu_ptr, dzitdzs_gpu_ptr
  type(c_ptr) :: fl_trans_gpu_ptr, fl_gpu_ptr, fln_gpu_ptr
  type(c_ptr) :: fhat_trans_gpu_ptr, fhat_gpu_ptr
  type(c_ptr) :: temperature_trans_gpu_ptr, temperature_gpu_ptr
@@ -274,8 +280,7 @@ module mod_streams
  attributes(device) :: gplus_z, gminus_z
 #endif
 
-#define USE_OMP
-#ifdef USE_OMP
+#ifdef USE_OMP_HIP
  CONTAINS
    subroutine set_device_gpu(myrank)
      use omp_lib
